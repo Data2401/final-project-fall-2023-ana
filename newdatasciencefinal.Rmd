@@ -1,0 +1,335 @@
+---
+title: "Housing data"
+author: "Nadia and ana"
+date: "2023-11-17"
+output: slidy_presentation
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+## Where is this Data coming from
+ For our project, we chose Redfin as our primary data source due to its reliability and up-to-date information. Redfin, being a real estate brokerage provides us with direct access to data from local multiple listing services. The real-time update feature allows us to explore genuine and timely values, enabling a thorough analysis of the ever-evolving real estate landscape. By utilizing Redfin's comprehensive dataset on county-level housing market trends, we hope to offer valuable insights and contribute to a more informed understanding of the broader market conditions.
+## Questions
+- How do the median sale of property types compare over the years in texas counties?
+- How do these trends of property types look individually?
+- Which property type was purchased the most throught out the years?
+- What did the median sale price look like in 2020 compared to 2023?
+- How does the median price listing compare to the price sold in Harris County?
+- Which season in harris county is the most popular to buy/sale?
+- Which counties are the most expensive to purchase a home in 2023?
+- Which counties are the most inexpensive to purchase a home in 2023?
+##Libraries we used
+```{r}
+library(kableExtra)
+library(viridis)
+# Data from website
+#https://www.redfin.com/news/data-center/
+library(dplyr)
+library(tidyverse)
+library(data.table) 
+library(ggplot2)
+#library(urbnmapr)
+library(viridisLite)
+# Read TSV file using fread() from data.table
+# tskv_file <- "county_market_tracker.tsv000"
+# data <- fread(tskv_file)
+# # CSV file
+# csv_file <- "output_file.csv"
+# fwrite(data, file = csv_file)
+# housingdata2 <- read.csv(csv_file)
+#texas_data <- read_csv("texas_data.csv")
+#texas_data <- read_csv("texas_data.csv")
+texas_data <- read_csv("texas_data.csv")
+
+```
+--
+#filtering Data Just to state of Texas
+```{r}
+# #texas_data <- housingdata2 %>%
+#   select(period_begin, period_end, region, state, property_type, homes_sold, 
+#          median_sale_price, median_ppsf, median_list_price, new_listings, 
+#          inventory) %>%                
+#   filter(state == "Texas") %>%
+#   filter(!is.na(homes_sold) & !is.na(median_sale_price) & !is.na(median_ppsf))
+
+```
+##The dates were classified as a character so right here we're just changing it to numeric
+```{r, echo=FALSE}
+texas_data <- texas_data %>% 
+  mutate(
+    period_begin = as.Date(period_begin),
+    period_end = as.Date(period_end),
+    month_begin = month(period_begin),
+    day_begin = day(period_begin),
+    year_begin = year(period_begin),
+    month_end = month(period_end),
+    day_end = day(period_end),
+    year_end = year(period_end)
+  )
+
+texas_counties <- texas_data %>%
+  filter(str_detect(region, ", TX"))
+texas_counties$region <- gsub(", TX", "", texas_counties$region)
+
+```
+## Years
+This graph visually tracks Texas real estate trends from 2012 to present, displaying average median sale prices for different property types. Points on the lines highlight specific data, and color-coded distinctions enhance clarity.
+```{r}
+texas_data %>%
+  group_by(property_type, year_end) %>%
+  summarise(avg_median_price = mean(median_sale_price, na.rm = TRUE)) %>%
+  ggplot(aes(x = year_end, y = avg_median_price, color = property_type)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Average Median Sale Price Trends by Property Type",
+       x = "Year",
+       y = "Average Median Sale Price",
+       color = "Property Type") +
+  theme_minimal() +
+  scale_color_brewer(palette = "Set1")
+
+```
+##Extra Graphs
+So alongside the graph we added previously we added extra graphs to better visualize and dig a bit deeper through the propety type prices , as we can see all property types have been consistenlty been increasing although we can see a slight decrease from multi family and single family residential prices after the year 2021
+```{r, , echo=FALSE}
+average_prices <- texas_data %>%
+  group_by(property_type, year_end) %>%
+  summarise(avg_median_price = mean(median_sale_price, na.rm = TRUE))
+
+ggplot(average_prices, aes(x = year_end, y = avg_median_price)) +
+  geom_line() +
+  labs(title = "Average Median Sale Price Trend for Texas Counties",
+       x = "Year",
+       y = "Average Median Sale Price") +
+  facet_wrap(~ property_type, scales = "free_y") +
+  theme_minimal()
+
+```
+##Distribution of property types sold through the years
+this bar graph encapsulates the evolving property type sales sold over the years in Texas , Each bar represents a specific property type, The overall sales across all property types have sustained a remarble consitency 
+```{r, , echo=FALSE}
+ggplot(texas_data, aes(x = property_type, fill = property_type)) +  
+  geom_bar() +
+  labs(title = "Property Types Sold Throughout the years",
+       x = "Property Type",
+       y = "Count") + 
+  coord_flip() + facet_wrap(~ year_end)
+```
+--
+```{r, echo=FALSE}
+newtexas <- texas_counties %>% 
+  select(region, state, median_sale_price, year_end) %>%                
+  filter(year_end == 2023) %>% 
+  group_by(region, state) %>% 
+  summarise(average_county = mean(median_sale_price, na.rm = TRUE))
+
+newtexas2020 <- texas_counties %>% 
+  select(region, state, median_sale_price, year_end) %>%                
+  filter(year_end == 2020) %>% 
+  group_by(region, state) %>% 
+  summarise(average_county = mean(median_sale_price, na.rm = TRUE))
+
+texas_data_2023 <- texas_data %>%
+  filter(year_end == 2023)
+
+# Filter data for the year 2020
+texas_data_2020 <- texas_data %>%
+  filter(year_end == 2020)
+```
+--
+# What is the median price sale like across the Texas Counties in 2020?
+```{r, echo=FALSE}
+#devtools::install_github("UrbanInstitute/urbnmapr")
+
+newtexas_map2 <- left_join(newtexas2020, counties, by = c("region" = "county_name")) %>%
+  filter(state_name == "Texas") 
+
+price_categories <- c("< $100,000", "$100,000 - $200,000", "$200,000 - $300,000", "> $300,000")
+price_colors <- c("#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3")  # Choose your own colors
+
+# color categories and corresponding price ranges
+price_categories2 <- c("< $100,000", "$100,000 - $200,000", "$200,000 - $300,000", "> $300,000")
+price_colors2 <- c("#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3")  
+
+# Create a factor variable for fill with the defined categories
+newtexas_map2$price_category <- cut(newtexas_map2$average_county,
+                                   breaks = c(-Inf, 100000, 200000, 300000, Inf),
+                                   labels = price_categories,
+                                   include.lowest = TRUE)
+
+# Plot using ggplot 
+ggplot(data = newtexas_map2, aes(long, lat, group = group, fill = price_category)) +
+  geom_polygon(color = "#ffffff", size = 0.25) +
+  scale_fill_manual(values = setNames(price_colors, price_categories)) +
+  coord_map(projection = "albers", lat0 = 27, lat1 = 35, xlim = c(-106, -93), ylim = c(25, 37)) +
+  theme(legend.title = element_text(),
+        legend.key.width = unit(0.5, "in")) +
+  labs(fill = "Average Median Sale Price in Texas Counties 2020")
+
+```
+--
+# What is the median price sale like across the Texas Counties in 2023?
+```{r, echo=FALSE}
+
+newtexas_map <- left_join(newtexas, counties, by = c("region" = "county_name")) %>%
+  filter(state_name == "Texas") 
+
+# Define color categories and corresponding price ranges
+
+
+newtexas_map$price_category <- cut(newtexas_map$average_county,
+                                   breaks = c(-Inf, 100000, 200000, 300000, Inf),
+                                   labels = price_categories,
+                                   include.lowest = TRUE)
+
+# Plot using ggplot with discrete color boxes
+ggplot(data = newtexas_map, aes(long, lat, group = group, fill = price_category)) +
+  geom_polygon(color = "#ffffff", size = 0.25) +
+  scale_fill_manual(values = setNames(price_colors, price_categories)) +
+  coord_map(projection = "albers", lat0 = 27, lat1 = 35, xlim = c(-106, -93), ylim = c(25, 37)) +
+  theme(legend.title = element_text(),
+        legend.key.width = unit(0.5, "in")) +
+  labs(fill = "Average Median Sale Price in Texas Counties 2023")
+
+```
+--
+# Which counties are the most expensive to purchase a home in 2023?
+the Texas real estate data for the year 2023 to identify the top five most expensive counties based on average median sale prices. Our code calculates the average median sale prices for each region, selects and distinctively presents the region along with the corresponding prices.
+```{r, echo=FALSE}
+avghome <- texas_data_2023 %>%
+  group_by(region) %>%
+  mutate(avg_median_sale_price = mean(median_sale_price, na.rm = TRUE)) %>%
+  select(region, avg_median_sale_price) %>%
+  distinct()  %>%   arrange(desc(avg_median_sale_price))
+
+head(avghome, 5)
+
+avghome <- texas_data_2023 %>%
+  group_by(region) %>%
+  mutate(avg_median_sale_price = mean(median_sale_price, na.rm = TRUE)) %>%
+  select(region, avg_median_sale_price) %>%
+  distinct() %>%
+  arrange(desc(avg_median_sale_price))
+
+top5_avghome <- head(avghome, 5)
+
+ggplot(top5_avghome, aes(x = fct_reorder(region, avg_median_sale_price), y = avg_median_sale_price)) +
+  geom_bar(stat = "identity", fill = "pink") +
+  labs(title = "Top 5 Expensive counties",
+       x = "Region",
+       y = "Average Median Sale Price") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 10, hjust = 1))
+
+
+```
+--
+# Which counties are the most inexpensive to purchase a home in 2023?
+The top five most affordable counties are visualized in a bar chart, with the x-axis showing the regions reordered by average median sale prices and the y-axis representing the prices.
+```{r, echo=FALSE}
+avghome2 <-texas_data_2023 %>%
+  group_by(region) %>%
+  mutate(avg_median_sale_price = mean(median_sale_price, na.rm = TRUE)) %>%
+  select(region, avg_median_sale_price) %>%
+  distinct()  # 
+
+head(arrange(avghome2, avg_median_sale_price), 5)
+
+avghome2 <- texas_data_2023 %>%
+  group_by(region) %>%
+  mutate(avg_median_sale_price = mean(median_sale_price, na.rm = TRUE)) %>%
+  select(region, avg_median_sale_price) %>%
+  distinct()
+
+top5_avghome2 <- head(arrange(avghome2, desc(avg_median_sale_price)), 5)
+
+ggplot(top5_avghome2, aes(x = fct_reorder(region, avg_median_sale_price), y = avg_median_sale_price)) +
+  geom_bar(stat = "identity", fill = "pink") +
+  labs(title = "Most Inexpensive county to purchase from 2023",
+       x = "Region",
+       y = "Average Median Sale Price") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 10, hjust = 1))
+```
+--
+```{r}
+scrollbox <- texas_data %>%
+  group_by(region) %>%
+  summarize(
+    inventory_count = n(),
+    median_median_list_price = median(median_list_price, na.rm = TRUE)
+  ) %>%
+  arrange(desc(inventory_count)) %>%
+  kbl() %>%
+  kable_paper() %>%
+  scroll_box(height = "300px")
+scrollbox
+```
+# Just data on harris county
+```{r}
+harris_county <- texas_data %>% filter(region == "Harris County, TX") %>% arrange(period_begin) 
+```
+--
+# How does the median price listing compare to the price sold in Harris County?
+Two lines on the graph, in blue and red, respectively, represent the median listing and median sales prices, providing a visual comparison of these key real estate indicators in Harris County over time.
+```{r, echo=FALSE}
+harris_county_monthly <- harris_county %>%
+  group_by(year_begin, month_begin) %>%
+  summarise(
+    median_list_price = mean(median_list_price),
+    median_sale_price = mean(median_sale_price)
+  )
+
+
+ggplot(harris_county_monthly, aes(x = year_begin + month_begin/12)) +
+  geom_line(aes(y = median_list_price, color = "Median Listing Price")) +
+  geom_line(aes(y = median_sale_price, color = "Median Sales Price")) 
+  labs(title = "Comparison of Median Listing and Median Sales Prices in Harris County, TX, Over the Years",
+       x = "Year",
+       y = "Price",
+       color = "Legend") +
+  scale_color_manual(values = c("Median Listing Price" = "blue", "Median Sales Price" = "red")) +
+  theme_minimal()
+```
+--
+# Which season in harris county is most popular to buy/sale?
+this bar graph delves into the data of home sales in Harris county across different seasons. The bars represent the total homes sold"
+```{r, echo=FALSE}
+texas_data <- texas_data %>%
+  mutate(
+    season_begin = case_when(
+      month_begin %in% c(3, 4, 5) ~ "Spring",
+      month_begin %in% c(6, 7, 8) ~ "Summer",
+      month_begin %in% c(9, 10, 11) ~ "Fall",
+      month_begin %in% c(12, 1, 2) ~ "Winter",
+      TRUE ~ NA_character_
+    ),
+    season_end = case_when(
+      month_end %in% c(3, 4, 5) ~ "Spring",
+      month_end %in% c(6, 7, 8) ~ "Summer",
+      month_end %in% c(9, 10, 11) ~ "Fall",
+      month_end %in% c(12, 1, 2) ~ "Winter",
+      TRUE ~ NA_character_
+    )
+  )
+
+harris_county <- texas_data %>% filter(region == "Harris County, TX") %>% arrange(period_begin) 
+
+
+ggplot(harris_county, aes(x = factor(year_begin), y = homes_sold, fill = season_begin)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Homes Sold Over the Years in Harris County, TX, by Season",
+       x = "Year",
+       y = "Homes Sold") +
+  scale_fill_manual(values = c("Spring" = "#7cc969", "Summer" = "#f089b8", "Fall" = "#e4832f", "Winter" = "#1da4b4")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+--
+#SUMMARY
+```{r}
+print ("Overall, this project has provided an exploration of Texas real estate dynamics, delving into aspects such as property prices, various property types, and overall market listings. Through rigorous analysis  we've discovered valuable insights, uncovering notable trends and patterns in the Texas real estate landscape. These finding enrich our understanding of the complexities within the real estate market.")
+```
